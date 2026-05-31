@@ -19,6 +19,9 @@ EXTRA_DIST = \
 	config.rpath \
 	libpappl-retrofit.pc.in
 
+EXTRA_DIST += \
+	pappl-retrofit/test-internal.h
+
 # ==================================
 # CUPS Driver legacy support library
 # ==================================
@@ -57,6 +60,39 @@ libpappl_retrofit_la_LDFLAGS = \
 
 EXTRA_DIST += \
 	$(pkgpappl_retrofitinclude_DATA)
+
+# =====
+# Tests
+# =====
+#
+# NOTE: The test CFLAGS deliberately add BOTH `-I$(srcdir)` and
+# `-I$(srcdir)/pappl-retrofit/`.  The latter lets each test file
+# include its target private header directly ("cups-backends-private.h",
+# "print-job-private.h", etc.); the former lets those private headers'
+# own `<pappl-retrofit/pappl-retrofit-private.h>` includes resolve.
+#
+# Only test_backend_parse is wired into `make check` for this first
+# PR.  Additional test files will be added in follow-up PRs.
+
+check_PROGRAMS = \
+	test_backend_parse
+TESTS = \
+	test_backend_parse
+
+test_backend_parse_SOURCES = pappl-retrofit/test_backend_parse.c
+test_backend_parse_LDADD = \
+	libpappl-retrofit.la \
+	$(CUPS_LIBS) \
+	$(CUPSFILTERS_LIBS) \
+	$(PPD_LIBS) \
+	$(PAPPL_LIBS)
+test_backend_parse_CFLAGS = \
+	-I$(srcdir) \
+	-I$(srcdir)/pappl-retrofit/ \
+	$(CUPS_CFLAGS) \
+	$(CUPSFILTERS_CFLAGS) \
+	$(PPD_CFLAGS) \
+	$(PAPPL_CFLAGS)
 
 # ==========================
 # Legacy Printer Application
