@@ -71,15 +71,14 @@ EXTRA_DIST += \
 # "print-job-private.h", etc.); the former lets those private headers'
 # own `<pappl-retrofit/pappl-retrofit-private.h>` includes resolve.
 #
-# test_backend_parse and test_ascii85 are wired into `make check`.
-# Additional test files will be added in follow-up PRs.
-
 check_PROGRAMS = \
 	test_backend_parse \
-	test_ascii85
+	test_ascii85 \
+	test_devid_match
 TESTS = \
 	test_backend_parse \
-	test_ascii85
+	test_ascii85 \
+	test_devid_match
 
 test_backend_parse_SOURCES = pappl-retrofit/test_backend_parse.c
 test_backend_parse_LDADD = \
@@ -104,6 +103,21 @@ test_ascii85_LDADD = \
 	$(PPD_LIBS) \
 	$(PAPPL_LIBS)
 test_ascii85_CFLAGS = \
+	-I$(srcdir) \
+	-I$(srcdir)/pappl-retrofit/ \
+	$(CUPS_CFLAGS) \
+	$(CUPSFILTERS_CFLAGS) \
+	$(PPD_CFLAGS) \
+	$(PAPPL_CFLAGS)
+
+test_devid_match_SOURCES = pappl-retrofit/test_devid_match.c
+test_devid_match_LDADD = \
+	libpappl-retrofit.la \
+	$(CUPS_LIBS) \
+	$(CUPSFILTERS_LIBS) \
+	$(PPD_LIBS) \
+	$(PAPPL_LIBS)
+test_devid_match_CFLAGS = \
 	-I$(srcdir) \
 	-I$(srcdir)/pappl-retrofit/ \
 	$(CUPS_CFLAGS) \
