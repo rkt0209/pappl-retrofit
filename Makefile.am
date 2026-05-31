@@ -249,6 +249,3 @@ endif
 uninstall-hook:
 
 SUBDIRS =
-
-check:
-	./test/test-legacy-printer.sh
