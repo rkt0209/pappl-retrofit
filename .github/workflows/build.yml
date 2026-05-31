@@ -1,43 +1,146 @@
-name: Build pappl-retrofit
+# =============================================================================
+# Build and Test Workflow for pappl-retrofit  (x86_64 / ubuntu-latest)
+#
+# Modelled on the libppd / libcupsfilters CI workflows in the sister
+# OpenPrinting repositories.  Scope is intentionally restricted to a single
+# native architecture (x86_64 on ubuntu-latest) so the build runs quickly
+# and deterministically while still proving:
+#
+#   * The complete repository compiles end-to-end (libpappl-retrofit.la,
+#     legacy-printer-app, plus every entry in check_PROGRAMS / TESTS) —
+#     not just that the test binaries link against an already-built
+#     library.
+#   * Every registered TEST passes (the hermetic C unit tests:
+#     test_backend_parse, test_ascii85, test_devid_match).
+#   * legacy-printer-app launches and responds to --help, catching
+#     ABI / symbol-resolution regressions against the runtime PAPPL,
+#     libcupsfilters and libppd packages.
+#
+# The apt package list was derived from a direct scan of configure.ac:
+#
+#   * PKG_CHECK_MODULES([PAPPL], [pappl])                  -> libpappl-dev
+#   * PKG_CHECK_MODULES([CUPSFILTERS], [libcupsfilters])   -> libcupsfilters-dev
+#   * PKG_CHECK_MODULES([PPD], [libppd])                   -> libppd-dev
+#   * AC_PATH_TOOL(CUPSCONFIG, [cups-config]) (cups3 absent
+#     on ubuntu-latest, falls back to libcups2)            -> libcups2-dev
+#   * AM_GNU_GETTEXT([external]) / AM_ICONV                -> gettext, autopoint
+#   * AC_PROG_CC, AM_PROG_CC_C_O                           -> build-essential
+#   * LT_INIT                                              -> libtool, libtool-bin
+#   * PKG_PROG_PKG_CONFIG                                  -> pkg-config
+#   * AC_PROG_INSTALL                                      -> (build-essential)
+#   * autotools toolchain                                  -> autoconf, automake
+#
+# zlib1g-dev is included to satisfy the AC_CHECK_HEADERS([zlib.h]) probe
+# (pulled in transitively by libcupsfilters anyway).
+# =============================================================================
+
+name: Build and Test (pappl-retrofit)
 
 on:
   push:
+    branches:
+      - '**'
   pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
 
 jobs:
   build:
+    name: Build & Test (x86_64)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      # -----------------------------------------------------------------------
+      # System dependencies — derived from configure.ac (see header comment).
+      # Note: libppd-dev and libpappl-dev availability depends on the runner's
+      # apt sources.  On stock ubuntu-latest both ship for 24.04+.  If a future
+      # runner image drops one of them, pin the runner version (e.g.
+      # ubuntu-24.04) or add the OpenPrinting PPA before this step.
+      # -----------------------------------------------------------------------
+      - name: Install build & runtime dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          set -ex
+          sudo apt-get update --fix-missing -y
+          sudo apt-get install -y --no-install-recommends \
             build-essential \
             autoconf \
             automake \
             autopoint \
-            gettext \
             libtool \
             libtool-bin \
             pkg-config \
+            gettext \
             libcups2-dev \
             libcupsfilters-dev \
             libppd-dev \
-            libpappl-dev
+            libpappl-dev \
+            zlib1g-dev
 
-      - name: Build project
-        run: |
-          ./autogen.sh
-          ./configure
-          make
-      
-      - name: Run tests
-        run: make check
+      # -----------------------------------------------------------------------
+      # Full build — autogen.sh regenerates configure / Makefile.in from the
+      # autotools sources; configure runs without --disable-* flags so every
+      # configure-time probe is exercised; make -j$(nproc) builds the library,
+      # legacy-printer-app, AND every check_PROGRAMS test binary, surfacing
+      # any compiler errors or warnings as build output.
+      # -----------------------------------------------------------------------
+      - name: autogen.sh
+        run: ./autogen.sh
 
-      - name: Test legacy printer application 
+      - name: configure
+        run: ./configure
+
+      - name: make
+        run: make -j$(nproc) V=1
+
+      # -----------------------------------------------------------------------
+      # Run the registered TESTS.  V=1 and VERBOSE=1 expose both the compile
+      # line per object AND each test's stderr in the workflow log on failure,
+      # matching the libcupsfilters / libppd CI pattern.  test-suite.log is
+      # cat'd inline on failure so the workflow output itself shows the
+      # automake summary even before the artifact-upload step runs.
+      # -----------------------------------------------------------------------
+      - name: make check
+        id: check
         run: |
-          ./legacy-printer-app --help
+          set -o pipefail
+          make check V=1 VERBOSE=1 || {
+            echo "==== test-suite.log ===="
+            test -f test-suite.log && cat test-suite.log
+            echo "==== per-test logs ===="
+            for f in pappl-retrofit/*.log; do
+              [ -f "$f" ] || continue
+              echo "---- $f ----"
+              cat "$f"
+            done
+            exit 1
+          }
+
+      # -----------------------------------------------------------------------
+      # Smoke-test legacy-printer-app — proves the linked binary actually
+      # loads against the runtime PAPPL / libppd / libcupsfilters and that
+      # CLI entry points still work.  --help exits 0 on success and prints
+      # the usage banner; any dlopen / undefined-symbol failure surfaces here.
+      # -----------------------------------------------------------------------
+      - name: Smoke-test legacy-printer-app --help
+        run: ./legacy-printer-app --help
+
+      # -----------------------------------------------------------------------
+      # Artifact upload — only fires when `make check` failed.  Captures the
+      # top-level test-suite.log automake produces plus any per-test .log /
+      # .trs files so the failure can be diagnosed offline.
+      # -----------------------------------------------------------------------
+      - name: Upload test-suite.log on failure
+        if: failure() && steps.check.conclusion == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pappl-retrofit-test-suite-log-x86_64
+          path: |
+            test-suite.log
+            **/*.log
+            **/*.trs
+          if-no-files-found: warn
+          retention-days: 14
