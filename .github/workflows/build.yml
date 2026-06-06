@@ -161,6 +161,7 @@ jobs:
             apt-get update --fix-missing -y -o Acquire::Retries=3
             DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata
             apt-get install -y --no-install-recommends \
+              ca-certificates \
               build-essential \
               gcc g++ \
               autoconf \
@@ -183,6 +184,7 @@ jobs:
               libpam-dev \
               libssl-dev \
               zlib1g-dev
+            update-ca-certificates
           run: |
             set -ex
             export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig:/usr/lib/pkgconfig
