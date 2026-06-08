@@ -135,6 +135,13 @@ jobs:
           cd "$REPO_DIR"
           ./legacy-printer-app --help
 
+      - name: Autopkgtest (DESTDIR staging, native)
+        if: matrix.use-qemu == false
+        run: |
+          set -ex
+          cd "$REPO_DIR"
+          make test-autopkgtest V=1
+
       # -----------------------------------------------------------------------
       # EMULATED LEG  (armhf via QEMU armv7, riscv64 via QEMU)
       #
@@ -218,6 +225,9 @@ jobs:
 
             # Smoke-test the linked binary
             ./legacy-printer-app --help
+
+            # Staged-install downstream autopkgtest (DESTDIR)
+            make test-autopkgtest V=1
 
       # -----------------------------------------------------------------------
       # ARTIFACT UPLOAD (all four legs, only on failure)

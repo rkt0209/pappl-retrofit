@@ -1,0 +1,10 @@
+Tests: pappl-retrofit-1-dev
+Depends: build-essential,
+	 libcups2-dev,
+         libcupsfilters-dev,
+	 libppd-dev,
+	 libpappl-dev,
+	 libpappl-retrofit-dev,
+	 libavahi-client-dev,
+         pkg-config,
+Restrictions: allow-stderr superficial

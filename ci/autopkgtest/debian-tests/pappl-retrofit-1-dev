@@ -1,0 +1,41 @@
+#!/bin/sh
+# autopkgtest check: Build and run a program against pappl-retrofit, to verify
+# that the headers and pkg-config file are installed correctly
+# (C) 2012 Canonical Ltd.
+# (C) 2018-2019 Simon McVittie
+# (C) 2023 Till Kamppeter
+# Authors: Martin Pitt, Simon McVittie, Till Kamppeter
+
+set -eux
+
+package=pappl-retrofit
+WORKDIR="$(mktemp -d)"
+export HOME="$WORKDIR"
+export XDG_RUNTIME_DIR="$WORKDIR"
+trap 'cd /; rm -rf "$WORKDIR"' 0 INT QUIT ABRT PIPE TERM
+
+if [ -n "${DEB_HOST_GNU_TYPE:-}" ]; then
+    CROSS_COMPILE="$DEB_HOST_GNU_TYPE-"
+else
+    CROSS_COMPILE=
+fi
+
+cd "$WORKDIR"
+cat <<EOF > test.c
+// Header file of pappl-retrofit API
+#include <pappl-retrofit.h>
+
+int main(int argc, char *argv[])
+{
+  // Actually use something from the library, so that it gets actually linked
+  return (prSupportsPDF("CMD:PDF;") == false);
+}
+EOF
+
+# Deliberately word-splitting pkg-config's output:
+# shellcheck disable=SC2046
+${CROSS_COMPILE}gcc -o "${package}-test" test.c $(${CROSS_COMPILE}pkg-config --cflags --libs "lib$package") $(${CROSS_COMPILE}pkg-config --cflags --libs "libcupsfilters") $(${CROSS_COMPILE}pkg-config --cflags --libs "libppd")
+echo "build ($package): OK"
+[ -x "${package}-test" ]
+./${package}-test
+echo "run ($package): OK"

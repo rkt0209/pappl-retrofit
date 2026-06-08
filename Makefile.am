@@ -209,6 +209,7 @@ distclean-local:
 
 clean-local:
 	rm -f $(legacy_printer_app_manpage8)
+	rm -rf $(CIROOT)
 
 install-data-hook:
 	$(INSTALL) -d -m 755 $(DESTDIR)$(legacy_printer_app_statedir)
@@ -249,3 +250,34 @@ endif
 uninstall-hook:
 
 SUBDIRS =
+
+# ============================================================
+# Staged-install downstream autopkgtests (DESTDIR staging)
+# ============================================================
+CIROOT = $(abs_top_builddir)/_ciroot
+
+EXTRA_DIST += \
+	ci/autopkgtest/run.sh \
+	ci/autopkgtest/debian-tests/control \
+	ci/autopkgtest/debian-tests/pappl-retrofit-1-dev
+
+# Stage a clean install of the just-built tree into $(CIROOT), then rewrite
+# the staged libpappl-retrofit.pc prefix so a downstream consumer resolves
+# THIS build (and not a system copy) while system dependency .pc files
+# (libcupsfilters / libppd / pappl) keep resolving normally.
+stage-ciroot: all
+	rm -rf "$(CIROOT)"
+	$(MAKE) $(AM_MAKEFLAGS) install DESTDIR="$(CIROOT)"
+	@pc="$(CIROOT)$(libdir)/pkgconfig/libpappl-retrofit.pc"; \
+	if [ -f "$$pc" ]; then \
+	  sed -i.bak "s|^prefix=.*|prefix=$(CIROOT)$(prefix)|" "$$pc"; \
+	  rm -f "$$pc.bak"; \
+	  echo "stage-ciroot: rewrote prefix in $$pc"; \
+	fi
+
+# Run the unmodified downstream Debian autopkgtests against $(CIROOT).
+test-autopkgtest: stage-ciroot
+	CIROOT="$(CIROOT)" CIPREFIX="$(prefix)" TOP_BUILDDIR="$(abs_top_builddir)" \
+	    $(SHELL) $(srcdir)/ci/autopkgtest/run.sh pappl-retrofit-1-dev
+
+.PHONY: stage-ciroot test-autopkgtest
